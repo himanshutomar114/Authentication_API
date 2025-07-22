@@ -30,102 +30,47 @@ A secure and scalable authentication API built with **Node.js**, **Express**, **
 
 ## 📁 Project Structure
 
-auth-api/
-│
-├── lib/
-│ └── db.js 
-│
-├── controllers/
-│ └── authController.js 
-│
-├── middleware/
-│ └── auth.middleware.js
-│
-├── models/
-│ └── user.js 
-│
-├── routes/
-│ └── authRoutes.js 
-│
-├── .env 
-├── server.js 
-└── package.json 
+```
+auth-app/
+├── server/ (Node.js Backend)
+│   ├── controllers/           → Auth logic (register, login, Google OAuth)
+│   ├── models/                → Mongoose schemas (User)
+│   ├── routes/                → Auth & user-related routes
+│   ├── middlewares/           → JWT authentication middleware
+│   ├── .env                   → Env variables (JWT, DB URI, OAuth keys)
+│   └── server.js              → Express server entry point
 
+```
 
 ---
 
 ## 🔄 Authentication Flow Diagram
 
-              ┌────────────────────────────┐
-              │       User (Client)        │
-              └────────────┬───────────────┘
-                           │
-                 1. Register/Login (email+pwd)
-                           │
-                           ▼
-              ┌────────────────────────────┐
-              │      Auth Controller       │
-              └────────────┬───────────────┘
-                           │
-          ┌────────────────┴────────────────┐
-          │                                 │
-          ▼                                 ▼
-  Check email & password         Create new user (Register)
-          │                                 │
-          ▼                                 ▼
-    Hash password (bcrypt)       Save user in DB (Mongoose)
-          │                                 │
-          └────────────┬────────────────────┘
-                       ▼
-          Generate Access & Refresh Tokens (JWT)
-                       │
-                       ▼
-             Return Tokens to Client
-                       │
-                       ▼
-      ┌─────────────────────────────────────┐
-      │   Client stores tokens (localStorage│
-      │   or secure cookies)                │
-      └─────────────────────────────────────┘
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Server
 
-       ───────────────────────────────────
-               🔒 Access Protected Route
-       ───────────────────────────────────
-                       │
-             Send Access Token in Header
-                       ▼
-          Verify Token (auth middleware)
-                       ▼
-          Allow access to protected data
+    alt Login Flow
+        Client->>Server: User provides credentials (email/pass or OAuth)
+        Server->>Server: Validate credentials & generate JWT
+        Server-->>Client: Respond with JWT
+        Client->>Client: Store JWT in localStorage
+    end
 
-       ───────────────────────────────────
-               🔄 Refresh Token Flow
-       ───────────────────────────────────
-                       │
-            Send refresh token to backend
-                       ▼
-          Verify + issue new access token
+    alt Authenticated API Call
+        Client->>Server: Request protected resource with JWT in Authorization header
+        Server->>Server: Middleware validates JWT
+        alt Token is valid
+            Server-->>Client: Return requested resource
+        else Token is invalid
+            Server-->>Client: Return 401 Unauthorized
+        end
+    end
+```
 
-       ───────────────────────────────────
-                  🌐 Google OAuth Flow
-       ───────────────────────────────────
-                       │
-         Click "Login with Google" Button
-                       ▼
-          Redirect to Google Consent Page
-                       ▼
-         User Authenticates on Google
-                       ▼
-          Google redirects to your callback
-                       ▼
-          Passport verifies Google token
-                       ▼
-        Check if user exists in database
-              ├────────────┐
-              ▼            ▼
-        Yes (login)     No (register)
-              ▼            ▼
-        Generate JWT & Send to Client
+
+       
 
 ### Setup
 
