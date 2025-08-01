@@ -19,7 +19,7 @@ const userSchema = new mongoose.Schema(
       },
       password: {
         type: String,
-        required: true,
+        
         minlength: 8,
       },
       bio: {
@@ -31,8 +31,8 @@ const userSchema = new mongoose.Schema(
         default: "",
       },
      location: {
-        lat: Number,
-        lng: Number,
+      type: String,
+      default: "",
       },
       isOnboarded: {
         type: Boolean,

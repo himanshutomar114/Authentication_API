@@ -1,19 +1,18 @@
 import User from "../models/user.js";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
-import dotenv from "dotenv"; 
-import { OAuth2Client } from "google-auth-library";
+import dotenv from "dotenv";
 import nodemailer from "nodemailer";
-
+import cloudinary from "../config/cloudinary.js";
 
 dotenv.config();
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+// Utility to generate username from name
 function generateUserName(name) {
   return name.trim().toLowerCase().replace(/\s+/g, "") + Math.floor(Math.random() * 1000);
 }
 
-// Signup
+// ===== Signup =====
 export async function signup(req, res) {
   const { email, password, fullName, userName } = req.body;
 
@@ -41,7 +40,6 @@ export async function signup(req, res) {
       return res.status(400).json({ message: "Username already taken" });
     }
 
-
     const newUser = await User.create({
       email,
       fullName,
@@ -56,7 +54,7 @@ export async function signup(req, res) {
 
     res.cookie("jwt", token, {
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      httpOnly: true,
+      httpOnly: true, // prevent XSS attacks
       sameSite: "none",
       secure: process.env.NODE_ENV === "production",
     });
@@ -68,10 +66,7 @@ export async function signup(req, res) {
   }
 }
 
-
-
-
-// Login
+// ===== Login =====
 export async function login(req, res) {
   try {
     const { email, password } = req.body;
@@ -102,9 +97,7 @@ export async function login(req, res) {
   }
 }
 
-
-
-// Logout
+// ===== Logout =====
 export function logout(req, res) {
   res.clearCookie("jwt", {
     httpOnly: true,
@@ -114,51 +107,80 @@ export function logout(req, res) {
   res.status(200).json({ success: true, message: "Logout successful" });
 }
 
-
-
-// Onboard
+// ===== Onboard =====
 export async function onboard(req, res) {
   try {
     const userId = req.user._id;
-    const { fullName, bio, location, userName, profilePic } = req.body;
+    const { fullName, bio, location, userName, existingProfilePic } = req.body;
 
-    if (!fullName || !bio || !location || !location.lat || !location.lng || !profilePic) {
+    // Validate required fields
+    if (!fullName || !bio || !location || !userName) {
       return res.status(400).json({
         message: "All fields are required",
         missingFields: [
           !fullName && "fullName",
+          !userName && "userName",
           !bio && "bio",
           !location && "location",
-          !profilePic && "profilePic",
         ].filter(Boolean),
       });
     }
-    
 
-    if (userName) {
-      const isTaken = await User.findOne({ userName, _id: { $ne: userId } });
-      if (isTaken) {
-        return res.status(400).json({ message: "Username already taken" });
-      }
+    // Check if username is already taken
+    const isTaken = await User.findOne({ userName, _id: { $ne: userId } });
+    if (isTaken) {
+      return res.status(400).json({ message: "Username already taken" });
     }
 
-    const updatedUser = await User.findByIdAndUpdate(
+    // Define function to update user
+    const updateUser = async (profilePicUrl) => {
+      const updatedUser = await User.findByIdAndUpdate(
         userId,
         {
           fullName,
           bio,
           location,
           userName,
-          profilePic,
+          profilePic: profilePicUrl,
           isOnboarded: true,
         },
         { new: true }
       );
-      
 
-    if (!updatedUser) return res.status(404).json({ message: "User not found" });
+      if (!updatedUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
 
-    res.status(200).json({ success: true, user: updatedUser });
+      res.status(200).json({ success: true, user: updatedUser });
+    };
+
+    // Handle new profile pic upload
+    if (req.file) {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: "certifly-profile-pics",
+          resource_type: "image",
+        },
+        async (error, result) => {
+          if (error) {
+            console.error("Cloudinary upload error:", error);
+            return res.status(500).json({ message: "Image upload failed" });
+          }
+
+          await updateUser(result.secure_url);
+        }
+      );
+
+      stream.end(req.file.buffer);
+    } else if (existingProfilePic) {
+      // Use existing profile pic if no new file uploaded
+      await updateUser(existingProfilePic);
+    } else {
+      return res.status(400).json({
+        message: "Profile picture is required",
+        missingFields: ["profilePic"],
+      });
+    }
   } catch (error) {
     console.error("Onboarding error:", error);
     res.status(500).json({ message: "Internal Server Error" });
@@ -167,34 +189,12 @@ export async function onboard(req, res) {
 
 
 
-// Google OAuth
-export async function googleLogin(req, res) {
+
+
+// ===== Google OAuth callback (after Passport login) =====
+export async function handleGoogleOAuthCallback(req, res) {
   try {
-    const { token } = req.body;
-    const ticket = await client.verifyIdToken({
-      idToken: token,
-      audience: process.env.GOOGLE_CLIENT_ID,
-    });
-
-    const payload = ticket.getPayload();
-    const { email, name, picture, sub: googleId } = payload;
-
-    let user = await User.findOne({ email });
-
-    if (!user) {
-      let userName = generateUserName(name);
-      while (await User.findOne({ userName })) {
-        userName = generateUserName(name);
-      }
-
-      user = await User.create({
-        email,
-        fullName: name,
-        userName,
-        googleId,
-        profilePic: picture,
-      });
-    }
+    const user = req.user;
 
     const jwtToken = jwt.sign({ userId: user._id }, process.env.JWT_SECRET_KEY, {
       expiresIn: "7d",
@@ -207,14 +207,14 @@ export async function googleLogin(req, res) {
       secure: process.env.NODE_ENV === "production",
     });
 
-    res.status(200).json({ success: true, user });
+    res.redirect(`${process.env.CLIENT_URL}/dashboard`); // Change if needed
   } catch (error) {
-    console.error("Google login error:", error.message);
+    console.error("Google OAuth error:", error.message);
     res.status(500).json({ message: "Google login failed" });
   }
 }
 
-// Forgot Password-sends the mail with link to reset password
+// ===== Forgot Password =====
 export async function forgotPassword(req, res) {
   const { email } = req.body;
   const user = await User.findOne({ email });
@@ -230,14 +230,14 @@ export async function forgotPassword(req, res) {
   const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_PASS,
     },
   });
 
   await transporter.sendMail({
     to: user.email,
-    from: process.env.EMAIL_USER,
+    from: process.env.GMAIL_USER,
     subject: "Reset your password",
     html: `<a href="${resetLink}">Click here to reset your password</a>`,
   });
@@ -245,7 +245,7 @@ export async function forgotPassword(req, res) {
   res.json({ message: "Reset link sent to email" });
 }
 
-// Reset Password-after clicking the link and changing the password it changes in the database
+// ===== Reset Password =====
 export async function resetPassword(req, res) {
   const { token } = req.params;
   const { password } = req.body;
