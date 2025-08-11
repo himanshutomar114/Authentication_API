@@ -28,6 +28,7 @@ export const signup = async (signupData) => {
     }
   };
 
+ 
 
   export const completeOnboarding = async (userData) => {
     const response = await axiosInstance.post("/auth/onboard", userData);
@@ -35,9 +36,15 @@ export const signup = async (signupData) => {
   };  
 
   export const googleLogin = async (userData) => {
-    const response = await axiosInstance.post("/auth/google-login", userData);
-    return response.data;
-  };  
+  const response = await axiosInstance.post("/auth/google-login", userData);
+
+  if (response.data.token) {
+    localStorage.setItem("google_jwt", response.data.token);
+  }
+
+  return response.data;
+};
+ 
 
   export const forgotPassword = async (userData) => {
     const response = await axiosInstance.post("/auth/forgot-password", userData);
@@ -48,3 +55,6 @@ export const signup = async (signupData) => {
     const response = await axiosInstance.post(`/auth/reset-password/${token}`, userData);
     return response.data;
   }; 
+
+  
+

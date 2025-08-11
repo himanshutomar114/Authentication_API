@@ -3,7 +3,7 @@ import passport from "passport";
 import jwt from "jsonwebtoken";
 import { login, signup, logout, onboard, forgotPassword, resetPassword } from "../controllers/authController.js";
 import { protectRoute } from "../middleware/auth.middleware.js";
-import { upload } from "../lib/multer.js";
+import { upload } from "../utils/multer.js";
 
 const router = express.Router();
 
@@ -11,21 +11,25 @@ const router = express.Router();
 router.get("/google", passport.authenticate("google", { scope: ["profile", "email"] }));
 
 // ✅ Google OAuth Callback
-router.get("/google/callback", passport.authenticate("google", { session: false }), (req, res) => {
-  const token = jwt.sign({ userId: req.user._id }, process.env.JWT_SECRET_KEY, {
-    expiresIn: "7d",
-  });
+router.get(
+  "/google/callback",
+  passport.authenticate("google", { session: false }),
+  (req, res) => {
+    const token = jwt.sign({ userId: req.user._id }, process.env.JWT_SECRET_KEY, {
+      expiresIn: "7d",
+    });
 
-  res.cookie("jwt", token, {
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-    httpOnly: true,
-    sameSite: "none",
-    secure: process.env.NODE_ENV === "production",
-  });
+    // Send token in query string to frontend
+    const frontendURL =
+      process.env.NODE_ENV === "production"
+        ? `https://production.app/oauth-success?token=${token}` // change with production url
+        : `http://localhost:5173/oauth-success?token=${token}`;
 
-  // Optional: Redirect to your frontend
-  res.redirect("http://localhost:5173/certificate"); // Or send user + token in response
-});
+    res.redirect(frontendURL);
+  }
+);
+
+
 
 // Other routes
 router.post("/signup", signup);

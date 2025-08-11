@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import useLogin from "../hooks/useLogin";
+import { useNavigate } from 'react-router-dom';
 
 const Login = () => {
    const[loginData,setLoginData] = useState({
@@ -8,6 +9,7 @@ const Login = () => {
     password: "",
    })
 
+   const navigate = useNavigate();
 
    const { isPending, error, loginMutation } = useLogin();
    const [showPassword, setShowPassword] = useState(false);
@@ -19,17 +21,27 @@ const Login = () => {
   };
 
 
- const handleLogin = async (e) =>{
-    e.preventDefault();
-    setIsLoading(true);
-    try {
-      await loginMutation(loginData);
-    } catch (err) {
-      console.error("Login failed:", err);
-    } finally {
-      setIsLoading(false);
+const handleLogin = async (e) => {
+  e.preventDefault();
+  setIsLoading(true);
+
+  try {
+    const response = await loginMutation(loginData);
+
+    // Save the token to localStorage (adjust according to your response shape)
+    if (response && response.token) {
+      localStorage.setItem("jwt", response.token);
+
+      navigate('/certificate');
     }
- } 
+  } catch (err) {
+    console.error("Login failed:", err);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+     
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-800 flex items-center justify-center p-4 relative overflow-hidden">
@@ -140,13 +152,24 @@ const Login = () => {
           </div>
 
           {/* Google Login (Redirect with Passport) */}
-          <button
-            onClick={() => window.location.href = "http://localhost:3000/api/auth/google"}
-            className="w-full bg-white text-black font-medium py-2 px-6 rounded-xl flex items-center justify-center gap-2 hover:scale-105 hover:bg-gray-100 transition-all duration-200 "
-          >
-            <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google logo" className="h-5 w-5" />
-            Continue with Google
-          </button>
+         <button
+  onClick={() => {
+    const backendURL =
+      import.meta.env.MODE === "development"
+        ? "http://localhost:3000"
+        : "https://certificate-sender-api.onrender.com";
+    window.location.href = `${backendURL}/api/auth/google`;
+  }}
+  className="w-full bg-white text-black font-medium py-2 px-6 rounded-xl flex items-center justify-center gap-2 hover:scale-105 hover:bg-gray-100 transition-all duration-200 "
+>
+  <img
+    src="https://developers.google.com/identity/images/g-logo.png"
+    alt="Google logo"
+    className="h-5 w-5"
+  />
+  Continue with Google
+</button>
+
 
           {/* Login Link */}
           <div className="text-center mt-5">

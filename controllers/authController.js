@@ -189,31 +189,6 @@ export async function onboard(req, res) {
 
 
 
-
-
-// ===== Google OAuth callback (after Passport login) =====
-export async function handleGoogleOAuthCallback(req, res) {
-  try {
-    const user = req.user;
-
-    const jwtToken = jwt.sign({ userId: user._id }, process.env.JWT_SECRET_KEY, {
-      expiresIn: "7d",
-    });
-
-    res.cookie("jwt", jwtToken, {
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      httpOnly: true,
-      sameSite: "none",
-      secure: process.env.NODE_ENV === "production",
-    });
-
-    res.redirect(`${process.env.CLIENT_URL}/dashboard`); // Change if needed
-  } catch (error) {
-    console.error("Google OAuth error:", error.message);
-    res.status(500).json({ message: "Google login failed" });
-  }
-}
-
 // ===== Forgot Password =====
 export async function forgotPassword(req, res) {
   const { email } = req.body;
@@ -221,11 +196,17 @@ export async function forgotPassword(req, res) {
   if (!user) return res.status(404).json({ message: "User not found" });
 
   const token = crypto.randomBytes(32).toString("hex");
-  user.resetPasswordToken = token;
+  const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+  user.resetPasswordToken = hashedToken;
   user.resetPasswordExpires = Date.now() + 3600000;
   await user.save();
 
-  const resetLink = `http://localhost:5173/reset-password/${token}`;
+
+  const baseURL =
+   process.env.NODE_ENV === "production"
+    ? "https://certi-fly.vercel.app"
+    : "http://localhost:5173";
+  const resetLink = `${baseURL}/reset-password/${token}`;
 
   const transporter = nodemailer.createTransport({
     service: "gmail",
@@ -250,8 +231,9 @@ export async function resetPassword(req, res) {
   const { token } = req.params;
   const { password } = req.body;
 
+  const hashedToken = crypto.createHash("sha256").update(req.params.token).digest("hex");
   const user = await User.findOne({
-    resetPasswordToken: token,
+    resetPasswordToken: hashedToken,
     resetPasswordExpires: { $gt: Date.now() },
   });
 
@@ -259,7 +241,7 @@ export async function resetPassword(req, res) {
 
   user.password = password;
   user.resetPasswordToken = undefined;
-  user.resetPasswordExpires = undefined;
+  user.resetPasswordExpires = undefined;;
   await user.save();
 
   res.json({ message: "Password reset successful" });

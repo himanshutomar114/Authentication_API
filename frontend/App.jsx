@@ -54,7 +54,8 @@ const App = () => {
           isAuthenticated ? <ProfilePage /> : <Navigate to="/login" replace />
         }
       />
-
+      
+      <Route path="/oauth-success" element={<OAuthSuccess />} />
       
       <Route path="/home" element={<HomePage />} />
 

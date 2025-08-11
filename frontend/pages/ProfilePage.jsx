@@ -10,7 +10,7 @@ const ProfilePage = () => {
 
     const { authUser } = useAuthUser();
     const queryClient = useQueryClient();
-    const navigate = useNavigate(); // Add this hook
+    const navigate = useNavigate(); 
 
 
     const { mutate: onboardingMutation, isPending, error } = useMutation({
@@ -152,11 +152,16 @@ const handleResetPassword = async () => {
     setIsDetectingLocation(true);
     setResetMessage('');
   
+    const backendURL =
+     import.meta.env.MODE === "development"
+    ? "http://localhost:3000"
+    : "https://certificate-sender-api.onrender.com";
+
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
         try {
-            const response = await fetch(`http://localhost:3000/reverse-geocode?lat=${latitude}&lon=${longitude}`);
+            const response = await fetch(`${backendURL}/reverse-geocode?lat=${latitude}&lon=${longitude}`);
             const data = await response.json();
   
           const city = data.address.city || data.address.town || data.address.village || '';
